@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dashboard de Iniciativas · IA + Resumen Ejecutivo</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
+<style>
+  :root{
+    --bg:#0a0f1b; --panel:#0f172a; --card:#0b1220; --muted:#93a4bd; --text:#e6edf6; --accent:#22d3ee;
+    --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; --border:#1b2844; --chip:#11203a; --shadow:0 12px 40px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 800px at 12% -8%, #0e1d36 0%, #0a0f1b 45%, #090d16 100%);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto,Ubuntu,Arial}
+  header{position:sticky;top:0;z-index:40;background:#0a0f1bcc;backdrop-filter:blur(8px);border-bottom:1px solid #0e1a2e}
+  .wrap{max-width:1200px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+  h1{margin:0;font-size:26px;font-weight:800}
+  .sub{margin:2px 0 0;color:var(--muted);font-size:12px}
+  .menu{position:relative}
+  .hamb{width:42px;height:42px;border-radius:12px;border:1px solid #1a2a46;background:#0b1420;cursor:pointer;display:grid;place-items:center}
+  .hamb span{display:block;width:18px;height:2px;background:#cdd9ea;margin:3px 0;border-radius:2px}
+  .menu-list{position:absolute;right:0;top:50px;background:#0f172a;border:1px solid #203152;border-radius:12px;min-width:240px;display:none;box-shadow:var(--shadow)}
+  .menu-list button,.menu-list a{display:flex;gap:10px;align-items:center;width:100%;padding:10px 12px;background:transparent;border:0;color:var(--text);cursor:pointer;text-align:left;text-decoration:none}
+  .menu-list button:hover,.menu-list a:hover{background:#0b1528}
+  .sep{height:1px;background:#1b2944;margin:4px 8px}
+
+  .wrap-page{max-width:1200px;margin:0 auto;padding:16px}
+  .hidden{display:none}
+  .grid{display:grid;gap:12px}
+  .controls{grid-template-columns:1fr 1.5fr}
+  .two{display:grid;gap:12px;grid-template-columns:2fr 1fr}
+  .card{background:linear-gradient(180deg,#0f172a 0%, #0c1424 100%);border:1px solid var(--border);border-radius:16px;padding:14px;box-shadow:var(--shadow)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  label{font-size:12px;color:var(--muted)}
+  input[type="text"],select,input[type="number"],input[type="password"]{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #1b2944;outline:none;background:#0b1420;color:var(--text)}
+  textarea{width:100%;min-height:86px;resize:vertical;padding:10px 12px;border-radius:12px;border:1px solid #1b2944;background:#0b1420;color:var(--text)}
+  .btn{appearance:none;border:1px solid #203152;background:#0b1420;color:var(--text);padding:10px 12px;border-radius:12px;cursor:pointer;transition:.2s}
+  .btn:hover{border-color:#2b3f68;transform:translateY(-1px)}
+  .btn.accent{border-color:#1b9db1;background:#0c1a26}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--chip);border:1px solid #1c2b4a;font-size:12px}
+  .chip input{accent-color:var(--accent)}
+  .pill{padding:2px 8px;border-radius:999px;background:#0b1420;border:1px solid #203152}
+  .mini{font-size:12px;color:var(--muted)}
+  .dot{width:10px;height:10px;border-radius:50%}
+
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  thead th{position:sticky;top:160px;background:#0f172a;z-index:5;border-bottom:1px solid #203252;padding:10px;text-align:left;font-weight:700}
+  tbody td{padding:12px 10px;border-bottom:1px solid #15233e;vertical-align:top}
+  tbody tr:hover{background:#0b1528}
+  .title{font-weight:800}
+  .author-pill{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;border-radius:999px;border:1px solid #1b2944;background:#0b1420;font-size:12px}
+  .badge{padding:4px 8px;border-radius:999px;border:1px solid #2a3c60}
+  .ok{border-color:var(--ok);color:#bdf7df}
+  .warn{border-color:var(--warn);color:#fde7b1}
+  .bad{border-color:var(--bad);color:#ffd1d1}
+  .leftbar{border-left:6px solid transparent;border-radius:12px}
+
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .cardItem{border:1px solid #1a2a4a;border-radius:14px;background:#0c1526;padding:12px}
+
+  .meter{height:8px;border-radius:6px;background:#0e213d;border:1px solid #1c335e;overflow:hidden}
+  .fill{height:100%}
+  canvas{width:100%;height:280px;background:#0b1420;border:1px solid #1b2944;border-radius:12px}
+
+  #drop{border:1.5px dashed #254068;border-radius:14px;background:linear-gradient(180deg,#0b1424 0%,#0a1220 100%);padding:18px;text-align:center}
+  #drop.drag{border-color:#22d3ee;background:#0b162a}
+  #drop small{color:var(--muted)}
+
+  /* Tooltip */
+  .tooltip{position:fixed;z-index:1000;max-width:360px;padding:10px 12px;border-radius:12px;background:#0c1628;color:#d4e2f7;border:1px solid #1e3152;box-shadow:var(--shadow);font-size:12px;line-height:1.35;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .12s,transform .12s}
+  .tooltip.show{opacity:1;transform:translateY(0)}
+  .tooltip .tt-title{font-weight:700;margin-bottom:6px;color:#a7c5ff}
+  .tt-grid{display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:start}
+  .tt-chip{padding:2px 8px;border-radius:999px;border:1px solid #294268;background:#0b1420;font-size:11px;color:#9ecfff}
+
+  .banner-warn{background:#301c0b;border:1px solid #4a2f12;color:#ffd7a4;padding:8px 10px;border-radius:10px}
+
+  @media (max-width:1000px){.controls{grid-template-columns:1fr}.two{grid-template-columns:1fr}.cards{grid-template-columns:1fr}thead th{top:220px}}
+  @media print{header,.btn,.chips,.weights,.toggle,.menu,.sticky,.tooltip{display:none}body{background:#fff;color:#000}.card{border-color:#ccc}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div>
+      <h1>Dashboard de Iniciativas</h1>
+      <p class="sub">Carga separada · Resumen Ejecutivo con IA · Puntuación explicada</p>
+    </div>
+    <div class="menu">
+      <button class="hamb" id="hambBtn" aria-label="Menú"><span></span><span></span><span></span></button>
+      <div class="menu-list" id="menuList" role="menu" aria-hidden="true">
+        <button data-nav="dashboard">📊 Dashboard</button>
+        <button data-nav="carga">📥 Carga de Documento</button>
+        <button data-nav="apikeys">🔑 API Keys</button>
+        <div class="sep"></div>
+        <button id="menuExportXLSX">⬇️ Exportar a Excel</button>
+        <button id="menuExportJSON">⬇️ Exportar JSON</button>
+        <label style="display:flex" for="menuImportJSON">⬆️ Importar JSON</label>
+        <input id="menuImportJSON" type="file" accept=".json" style="display:none">
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="view-dashboard" class="wrap-page">
+  <div id="aiBanner" class="banner-warn hidden">⚠️ Configurá tu API Key en <b>🔑 API Keys</b> para habilitar el resumen con IA.</div>
+
+  <div class="grid controls sticky" style="margin-top:12px">
+    <div class="card">
+      <label>Buscar (título, autor, resumen, explicación…)</label>
+      <input id="search" type="text" placeholder="Filtrar rápidamente…">
+      <div id="authorChips" class="chips"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <label style="flex:1">Filtrar por tipo de iniciativa</label>
+        <select id="filterType" style="flex:2">
+          <option value="">Todos los tipos</option>
+          <option value="Colaboración Interna">Colaboración Interna</option>
+          <option value="Alianzas Estratégicas">Alianzas Estratégicas</option>
+          <option value="Innovación y Servicios">Innovación y Servicios</option>
+        </select>
+      </div>
+      <div class="row">
+        <div style="min-width:220px;flex:1">
+          <label>Ordenar por</label>
+          <select id="sort">
+            <option value="score">Puntaje total (desc)</option>
+            <option value="impact">Impacto</option>
+            <option value="viability">Viabilidad</option>
+            <option value="scalability">Escalabilidad</option>
+            <option value="business">Prop. Comercial</option>
+            <option value="effort">Esfuerzo</option>
+            <option value="title">Título (A–Z)</option>
+          </select>
+        </div>
+        <div class="row">
+          <button class="btn" id="toggleView">Cambiar a Cards</button>
+          <button class="btn" id="printBtn">Imprimir / PDF</button>
+          <button class="btn accent" id="exportExcelBtn">Exportar a Excel</button>
+          <button class="btn" id="exportJSONBtn">Exportar JSON</button>
+          <label class="btn" for="importJSON">Importar JSON</label>
+          <input id="importJSON" type="file" accept=".json" style="display:none">
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span class="pill">Puntaje = promedio ponderado (1–5)</span>
+        <span class="pill"># numeración dinámica según el orden actual</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>Ponderaciones</label>
+      <div class="grid" style="grid-template-columns:repeat(4,1fr);gap:10px">
+        <div><div class="row" style="justify-content:space-between"><span>Impacto</span><span id="wImpactVal" class="mini">35%</span></div><input id="wImpact" type="range" min="0" max="100" value="35"></div>
+        <div><div class="row" style="justify-content:space-between"><span>Viabilidad</span><span id="wViabilityVal" class="mini">25%</span></div><input id="wViability" type="range" min="0" max="100" value="25"></div>
+        <div><div class="row" style="justify-content:space-between"><span>Escalabilidad</span><span id="wScalabilityVal" class="mini">20%</span></div><input id="wScalability" type="range" min="0" max="100" value="20"></div>
+        <div><div class="row" style="justify-content:space-between"><span>Prop. Comercial</span><span id="wBusinessVal" class="mini">20%</span></div><input id="wBusiness" type="range" min="0" max="100" value="20"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid two" style="margin-top:12px">
+    <div class="grid">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <strong>Mapa de Priorización</strong>
+          <span class="mini">Ejes: Impacto (X) vs. Esfuerzo (Y)</span>
+        </div>
+        <canvas id="quad"></canvas>
+      </div>
+
+      <div class="card" id="tableView">
+        <table id="mainTable">
+          <thead>
+          <tr>
+            <th style="width:6%">#</th>
+            <th style="width:22%">Iniciativa</th>
+            <th style="width:10%">Tipo</th>
+            <th style="width:12%">Autor</th>
+            <th style="width:28%">Resumen</th>
+            <th>Impacto</th>
+            <th>Viabilidad</th>
+            <th>Escalabilidad</th>
+            <th>Prop. Comercial</th>
+            <th>Esfuerzo</th>
+            <th>Recomendación</th>
+            <th>Puntaje</th>
+          </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="card" id="cardsView" style="display:none">
+        <div class="cards" id="cards"></div>
+      </div>
+    </div>
+
+    <div id="editor">
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <strong>Editor de Iniciativa</strong>
+          <span class="mini">Ajustá y guardá</span>
+        </div>
+        <div class="row">
+          <div style="flex:1"><label>Título</label><input id="f_title" type="text" /></div>
+          <div style="width:180px"><label>Autor</label><input id="f_author" type="text" /></div>
+        </div>
+        <div class="row">
+          <div style="flex:1"><label>Tipo de Iniciativa</label>
+            <select id="f_tipo">
+              <option value="">Seleccionar tipo</option>
+              <option value="Colaboración Interna">Colaboración Interna</option>
+              <option value="Alianzas Estratégicas">Alianzas Estratégicas</option>
+              <option value="Innovación y Servicios">Innovación y Servicios</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div style="width:120px"><label>Impacto (1–5)</label><input id="f_impact" type="number" min="1" max="5" step="1"></div>
+          <div style="width:120px"><label>Viabilidad (1–5)</label><input id="f_viability" type="number" min="1" max="5" step="1"></div>
+          <div style="width:120px"><label>Escalabilidad (1–5)</label><input id="f_scalability" type="number" min="1" max="5" step="1"></div>
+          <div style="width:140px"><label>Prop. Comercial (1–5)</label><input id="f_business" type="number" min="1" max="5" step="1"></div>
+          <div style="width:120px"><label>Esfuerzo (1–5)</label><input id="f_effort" type="number" min="1" max="5" step="1" value="3"></div>
+        </div>
+        <div style="margin-top:8px"><label>Resumen (síntesis del Resumen Ejecutivo)</label><textarea id="f_summary" placeholder="2–3 frases claras (máx ~300)"></textarea></div>
+        <div class="row" style="margin-top:8px">
+          <div style="flex:1"><label>Riesgo</label><input id="f_risk" type="text" placeholder="Riesgos principales (opcional)"></div>
+          <div style="width:200px"><label>Recomendación</label><select id="f_rec"><option>Priorizar</option><option>Postergar</option><option>Descartar</option></select></div>
+        </div>
+        <div style="margin-top:8px"><label>KPIs (separados por ; )</label><input id="f_kpis" type="text" placeholder="Ej: Clientes Mes 12; Margen ≥40%"></div>
+        <details style="margin-top:10px">
+          <summary class="mini">Editar explicaciones de puntajes (opcional)</summary>
+          <div class="row" style="margin-top:8px">
+            <div style="flex:1"><label>Impacto - Explicación</label><input id="f_r_impact" type="text"></div>
+            <div style="flex:1"><label>Viabilidad - Explicación</label><input id="f_r_viability" type="text"></div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div style="flex:1"><label>Escalabilidad - Explicación</label><input id="f_r_scalability" type="text"></div>
+            <div style="flex:1"><label>Prop. Comercial - Explicación</label><input id="f_r_business" type="text"></div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div style="flex:1"><label>Esfuerzo - Explicación</label><input id="f_r_effort" type="text"></div>
+          </div>
+        </details>
+        <div class="row" style="margin-top:10px">
+          <button class="btn accent" id="saveBtn">Guardar / Actualizar</button>
+          <button class="btn" id="clearBtn">Limpiar</button>
+          <button class="btn" id="deleteBtn">Eliminar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="view-carga" class="wrap-page hidden">
+  <div class="grid" style="grid-template-columns:1.2fr .8fr">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <strong>📥 Carga de Documento</strong>
+        <span class="mini">Subí .docx → extrae <b>Resumen Ejecutivo</b>, sintetiza con IA y puntúa con explicación</span>
+      </div>
+      <div id="drop" style="margin-top:10px">
+        <div class="row" style="justify-content:center;gap:12px">
+          <div class="dot" style="background:var(--accent)"></div>
+          <strong>Arrastrá y soltá aquí</strong>
+        </div>
+        <p class="muted" style="margin:6px 0 10px">o <label for="filePick" style="text-decoration:underline;cursor:pointer">buscá en tu equipo</label></p>
+        <input id="filePick" type="file" multiple accept=".docx" style="display:none">
+        <small>El autor se detecta por la línea <b>“Propuesta por:”</b> debajo del título.</small>
+      </div>
+      <div style="margin-top:14px">
+        <strong>Previsualización</strong>
+        <div id="previewList" class="grid" style="margin-top:10px;gap:10px"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn accent" id="commitAllBtn">Guardar todos en el Dashboard</button>
+          <button class="btn" id="clearPreviewBtn">Vaciar previsualizaciones</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <strong>Proveedor de IA</strong>
+      <div class="row" style="margin-top:8px">
+        <select id="aiProvider" style="max-width:220px">
+          <option value="gemini">Gemini</option>
+          <option value="openai">OpenAI</option>
+        </select>
+        <span class="mini">Usa las API Keys guardadas</span>
+      </div>
+      <div style="margin-top:10px">
+        <strong class="mini">Qué hace la IA</strong>
+        <ul class="mini" style="line-height:1.5;margin-top:6px">
+          <li>Resume el <b>Resumen Ejecutivo</b> en 2–3 frases claras.</li>
+          <li>Asigna puntajes (1–5) y una explicación por variable.</li>
+          <li>Todo editable luego en el editor del Dashboard.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="view-apikeys" class="wrap-page hidden">
+  <div class="grid" style="grid-template-columns:1fr 1fr">
+    <div class="card">
+      <strong>🔑 OpenAI</strong>
+      <p class="mini">Endpoint: <code>/v1/chat/completions</code> (modelo sugerido: <b>gpt-4o-mini</b>).</p>
+      <label>API Key de OpenAI</label>
+      <input id="openaiKey" type="password" placeholder="sk-..." />
+      <label style="margin-top:8px">Modelo</label>
+      <input id="openaiModel" type="text" value="gpt-4o-mini" />
+      <div class="row" style="margin-top:10px">
+        <button class="btn accent" id="saveOpenAI">Guardar</button>
+        <button class="btn" id="clearOpenAI">Borrar</button>
+        <button class="btn" id="testOpenAI">Test</button>
+      </div>
+      <p id="openaiStatus" class="mini" style="margin-top:8px;color:#9ad1ff"></p>
+    </div>
+    <div class="card">
+      <strong>🔑 Gemini</strong>
+      <p class="mini">Endpoint: <code>v1beta/models/gemini-1.5-flash:generateContent</code>.</p>
+      <label>API Key de Gemini</label>
+      <input id="geminiKey" type="password" placeholder="AIza..." />
+      <label style="margin-top:8px">Modelo</label>
+      <input id="geminiModel" type="text" value="gemini-1.5-flash" />
+      <div class="row" style="margin-top:10px">
+        <button class="btn accent" id="saveGemini">Guardar</button>
+        <button class="btn" id="clearGemini">Borrar</button>
+        <button class="btn" id="testGemini">Test</button>
+      </div>
+      <p id="geminiStatus" class="mini" style="margin-top:8px;color:#9ad1ff"></p>
+    </div>
+  </div>
+</section>
+
+<div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true">
+  <div class="tt-title">Explicación del puntaje</div>
+  <div class="tt-grid">
+    <span class="tt-chip" id="ttMetric">—</span>
+    <div id="ttText">—</div>
+  </div>
+</div>
+
+<script>
+/* ====================== Supabase Config ====================== */
+const supabaseUrl = 'https://jhqkeqjqiupoduieqmvj.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpocWtlcWpxaXVwb2R1aWVxbXZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwMzA2NjQsImV4cCI6MjA3MDYwNjY2NH0.GDZFPO1jozFw2htKGr9VbyULpHnu-yF7gHqnCImopLI';
+const supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+/* ====================== Estado & Persistencia ====================== */
+let initiatives = [];
+let filtered = [];
+let selectedId = null;
+let state = {
+  query:"",
+  authors:new Set(),
+  filterType: "",
+  sort:"score",
+  view:"table",
+  weights:{impact:35,viability:25,scalability:20,business:20},
+  ai:{ provider:"gemini", openaiKey:"", openaiModel:"gpt-4o-mini", geminiKey:"", geminiModel:"gemini-1.5-flash" }
+};
+const palette = ["#2E86DE","#E67E22","#27AE60","#9B59B6","#16A085","#D35400","#8E44AD","#F39C12","#00B894","#E84393"];
+const authorColors = {};
+
+async function saveToSupabase(initiative, isNew){
+  try{
+    if(isNew){
+      const { id, ...dataToInsert } = initiative;
+      const { error } = await supabaseClient.from('iniciativas').insert([dataToInsert]);
+      if(error) throw error;
+    }else{
+      const { error } = await supabaseClient.from('iniciativas').update(initiative).eq('id', initiative.id);
+      if(error) throw error;
+    }
+  }catch(e){
+    console.error("Error al guardar en Supabase:", e);
+    alert("Error al guardar en la base de datos.");
+  }
+}
+
+async function loadFromSupabase(){
+  try{
+    const { data, error } = await supabaseClient.from('iniciativas').select('*');
+    if(error) throw error;
+    initiatives = data || [];
+  }catch(e){
+    console.error("Error al cargar de Supabase:", e);
+    alert("Error al cargar datos desde la base de datos.");
+    initiatives = [];
+  }
+}
+
+function colorFor(author){ if(!authorColors[author]){ authorColors[author] = palette[Object.keys(authorColors).length % palette.length]; } return authorColors[author]; }
+
+/* ====================== NAV ====================== */
+const viewDash = document.getElementById("view-dashboard");
+const viewCarga = document.getElementById("view-carga");
+const viewKeys = document.getElementById("view-apikeys");
+const menu = document.getElementById("menuList");
+document.getElementById("hambBtn").addEventListener("click",(e)=>{e.stopPropagation();menu.style.display=menu.style.display==="block"?"none":"block";});
+document.addEventListener("click",()=>menu.style.display="none");
+menu.addEventListener("click",(e)=>{ const nav=e.target.dataset?.nav; if(nav) showView(nav); });
+function showView(which){
+  viewDash.classList.add("hidden"); viewCarga.classList.add("hidden"); viewKeys.classList.add("hidden");
+  if(which==="dashboard") viewDash.classList.remove("hidden");
+  if(which==="carga") viewCarga.classList.remove("hidden");
+  if(which==="apikeys") viewKeys.classList.remove("hidden");
+  window.location.hash = "#/"+which;
+  menu.style.display="none";
+}
+window.addEventListener("hashchange", ()=>{
+  const h=location.hash.replace("#/","");
+  if(["dashboard","carga","apikeys"].includes(h)) showView(h); else showView("dashboard");
+});
+
+/* ====================== Helpers ====================== */
+function avgScore(i,w){ const s=i.impact*w.impact+i.viability*w.viability+i.scalability*w.scalability+i.business*w.business; return +(s/100).toFixed(2); }
+function meter(val,color){ const p=(val/5)*100; return `<div class="meter"><div class="fill" style="width:${p}%;background:${color};opacity:.9"></div></div><div class="mini" style="margin-top:4px">${(+val).toFixed(1)} / 5</div>`; }
+function badge(rec){ if(/priorizar/i.test(rec))return`<span class="badge ok">✔ Priorizar</span>`; if(/postergar/i.test(rec))return`<span class="badge warn">⏳ Postergar</span>`; return`<span class="badge bad">✖ Descartar</span>`; }
+function shortModel(n){ if(n>=5)return"Premium"; if(n>=4)return"Alto"; if(n>=3)return"Medio"; return"Bajo";}
+function normalizeSpaces(s){ return (s||"").replace(/\s+/g," ").trim(); }
+function sentences(txt){ return (txt||"").split(/(?<=[\.\!\?])\s+/).map(s=>s.trim()).filter(Boolean); }
+function hasAI(){ return (state.ai.provider==="openai" && state.ai.openaiKey) || (state.ai.provider==="gemini" && state.ai.geminiKey); }
+
+/* ====================== Tooltip ====================== */
+const tt = document.getElementById("tooltip");
+const ttMetric = document.getElementById("ttMetric");
+const ttText = document.getElementById("ttText");
+let ttVisible = false;
+function tooltipify(el, metric, text){ if(!el) return; el.classList.add("has-tip"); el.dataset.metric=metric; el.dataset.tip=text||"Sin explicación disponible."; }
+function showTip(e){
+  const target = e.target.closest(".has-tip");
+  if(!target){ hideTip(); return; }
+  ttMetric.textContent = target.dataset.metric||"Detalle";
+  ttText.textContent = target.dataset.tip||"";
+  const pad=12; let x=e.clientX+pad, y=e.clientY+pad;
+  const r=tt.getBoundingClientRect();
+  if(x+r.width>window.innerWidth-12) x=e.clientX-r.width-pad;
+  if(y+r.height>window.innerHeight-12) y=e.clientY-r.height-pad;
+  tt.style.left=x+"px"; tt.style.top=y+"px";
+  if(!ttVisible){ tt.classList.add("show"); tt.setAttribute("aria-hidden","false"); ttVisible=true; }
+}
+function hideTip(){ if(ttVisible){ tt.classList.remove("show"); tt.setAttribute("aria-hidden","true"); ttVisible=false; } }
+document.addEventListener("mousemove", showTip);
+document.addEventListener("mouseleave", hideTip);
+
+/* ====================== Render principal ====================== */
+const chipsWrap = document.getElementById("authorChips");
+function rebuildChips(){
+  const authors = [...new Set(initiatives.map(i=>i.author).filter(Boolean))].sort();
+  if(state.authors.size===0) authors.forEach(a=>state.authors.add(a));
+  chipsWrap.innerHTML = "";
+  authors.forEach(a=>{
+    const color = colorFor(a);
+    const lab = document.createElement("label");
+    lab.className="chip";
+    lab.innerHTML = `<span class="dot" style="background:${color}"></span>${a}
+                     <input type="checkbox" data-author="${a}" ${state.authors.has(a)?"checked":""}>`;
+    chipsWrap.appendChild(lab);
+  });
+}
+chipsWrap.addEventListener("change", e=>{
+  if(e.target && e.target.type==="checkbox"){
+    const a = e.target.dataset.author;
+    if(e.target.checked) state.authors.add(a); else state.authors.delete(a);
+    renderAll();
+  }
+});
+document.getElementById("filterType").addEventListener("change", e => {
+  state.filterType = e.target.value;
+  renderAll();
+});
+
+
+function applyFilters(){
+  const q=(state.query||"").toLowerCase().trim();
+  filtered = initiatives
+    .filter(i=>{
+      const text=(i.title+" "+i.author+" "+i.summary+" "+(i.reasons?Object.values(i.reasons).join(" "):"")+" "+(i.fulltext||"")).toLowerCase();
+      const matchQ=!q || text.includes(q);
+      const matchA=state.authors.size===0 || state.authors.has(i.author);
+      const matchT = !state.filterType || i.tipo_iniciativa === state.filterType;
+      return matchQ && matchA && matchT;
+    })
+    .map(i=>({...i, score:avgScore(i,state.weights)}));
+
+  switch(state.sort){
+    case "impact": filtered.sort((a,b)=>b.impact-a.impact); break;
+    case "viability": filtered.sort((a,b)=>b.viability-a.viability); break;
+    case "scalability": filtered.sort((a,b)=>b.scalability-a.scalability); break;
+    case "business": filtered.sort((a,b)=>b.business-a.business); break;
+    case "effort": filtered.sort((a,b)=>a.effort-b.effort); break;
+    case "title": filtered.sort((a,b)=>a.title.localeCompare(b.title)); break;
+    default: filtered.sort((a,b)=>b.score-a.score);
+  }
+}
+
+function renderTable(){
+  const tb=document.getElementById("tbody"); tb.innerHTML="";
+  filtered.forEach((i,idx)=>{
+    const tr=document.createElement("tr"); tr.className="leftbar"; tr.style.borderLeftColor=colorFor(i.author); tr.dataset.id=i.id;
+    tr.innerHTML=`
+      <td><span class="pill">#${idx+1}</span></td>
+      <td><div class="row" style="align-items:center;gap:10px">
+            <div class="dot" style="background:${colorFor(i.author)}"></div>
+            <div><div class="title">${i.title}</div><div class="mini muted">Prop. Comercial: <b>${shortModel(i.business)}</b></div></div>
+          </div></td>
+      <td>${i.tipo_iniciativa || "N/A"}</td>
+      <td><span class="author-pill"><span class="dot" style="background:${colorFor(i.author)}"></span>${i.author}</span></td>
+      <td>${i.summary||""}</td>
+      <td class="metric-cell">${meter(i.impact,colorFor(i.author))}</td>
+      <td class="metric-cell">${meter(i.viability,colorFor(i.author))}</td>
+      <td class="metric-cell">${meter(i.scalability,colorFor(i.author))}</td>
+      <td class="metric-cell">${meter(i.business,colorFor(i.author))}</td>
+      <td class="metric-cell">${meter(i.effort||3,colorFor(i.author))}</td>
+      <td>${badge(i.rec||"Priorizar")}</td>
+      <td><b>${i.score.toFixed(2)}</b></td>`;
+    tr.addEventListener("click",()=>selectForEdit(i.id)); tb.appendChild(tr);
+    const m=tr.querySelectorAll(".metric-cell");
+    tooltipify(m[0], "Impacto ("+i.impact+"/5)", i.reasons?.impact || "");
+    tooltipify(m[1], "Viabilidad ("+i.viability+"/5)", i.reasons?.viability || "");
+    tooltipify(m[2], "Escalabilidad ("+i.scalability+"/5)", i.reasons?.scalability || "");
+    tooltipify(m[3], "Prop. Comercial ("+i.business+"/5)", i.reasons?.business || "");
+    tooltipify(m[4], "Esfuerzo ("+(i.effort||3)+"/5)", i.reasons?.effort || "");
+  });
+}
+function renderCards(){
+  const cards=document.getElementById("cards"); cards.innerHTML="";
+  filtered.forEach((i,idx)=>{
+    const c=document.createElement("div"); c.className="cardItem leftbar"; c.style.borderLeftColor=colorFor(i.author); c.dataset.id=i.id;
+    c.innerHTML=`
+      <div class="row" style="justify-content:space-between">
+        <div class="title">#${idx+1} · ${i.title}</div>
+        <span class="author-pill"><span class="dot" style="background:${colorFor(i.author)}"></span>${i.author}</span>
+      </div>
+      <div class="pill" style="margin-top:6px">${i.tipo_iniciativa || "N/A"}</div>
+      <p class="mini" style="margin:6px 0 10px">${i.summary||""}</p>
+      <div class="row" style="gap:12px">
+        <div class="metric-cell" style="flex:1"><label>Impacto</label>${meter(i.impact,colorFor(i.author))}</div>
+        <div class="metric-cell" style="flex:1"><label>Viabilidad</label>${meter(i.viability,colorFor(i.author))}</div>
+        <div class="metric-cell" style="flex:1"><label>Escalabilidad</label>${meter(i.scalability,colorFor(i.author))}</div>
+        <div class="metric-cell" style="flex:1"><label>Prop. Comercial</label>${meter(i.business,colorFor(i.author))}</div>
+        <div class="metric-cell" style="flex:1"><label>Esfuerzo</label>${meter(i.effort||3,colorFor(i.author))}</div>
+      </div>
+      <div class="row" style="justify-content:space-between;margin-top:10px">
+        <div>${badge(i.rec||"Priorizar")}</div>
+        <div>Puntaje: <b>${i.score.toFixed(2)}</b></div>
+      </div>`;
+    c.addEventListener("click",()=>selectForEdit(i.id)); cards.appendChild(c);
+    const m=c.querySelectorAll(".metric-cell");
+    tooltipify(m[0], "Impacto ("+i.impact+"/5)", i.reasons?.impact || "");
+    tooltipify(m[1], "Viabilidad ("+i.viability+"/5)", i.reasons?.viability || "");
+    tooltipify(m[2], "Escalabilidad ("+i.scalability+"/5)", i.reasons?.scalability || "");
+    tooltipify(m[3], "Prop. Comercial ("+i.business+"/5)", i.reasons?.business || "");
+    tooltipify(m[4], "Esfuerzo ("+(i.effort||3)+"/5)", i.reasons?.effort || "");
+  });
+}
+function drawQuadrant(){
+  const canvas=document.getElementById("quad"); const ctx=canvas.getContext("2d");
+  const W=canvas.width=canvas.clientWidth*devicePixelRatio; const H=canvas.height=canvas.clientHeight*devicePixelRatio;
+  ctx.scale(devicePixelRatio,devicePixelRatio);
+  ctx.fillStyle="#0b1420"; ctx.fillRect(0,0,canvas.clientWidth,canvas.clientHeight);
+  const pad=32; const w=canvas.clientWidth-pad*2; const h=canvas.clientHeight-pad*2;
+  ctx.strokeStyle="#203152"; ctx.lineWidth=1.2; ctx.strokeRect(pad,pad,w,h);
+  ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(pad+w/2,pad); ctx.lineTo(pad+w/2,pad+h); ctx.moveTo(pad,pad+h/2); ctx.lineTo(pad+w,pad+h/2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle="#9fb0c8"; ctx.font="12px Inter"; ctx.fillText("Impacto ⟶", pad+w-70, pad+h+18);
+  ctx.save(); ctx.translate(12,pad+12); ctx.rotate(-Math.PI/2); ctx.fillText("Esfuerzo ⟶ (menor es mejor)",0,0); ctx.restore();
+  filtered.forEach(i=>{
+    const x=pad+((i.impact-1)/4)*w; const y=pad+((i.effort-1)/4)*h;
+    ctx.fillStyle=colorFor(i.author); ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle="#d7e2f3"; ctx.font="11px Inter"; ctx.fillText(i.title.slice(0,24),x+8,y-8);
+  });
+}
+async function renderAll(){
+  await loadFromSupabase();
+  document.getElementById("aiBanner").classList.toggle("hidden", hasAI());
+  rebuildChips(); applyFilters(); renderTable(); renderCards(); drawQuadrant();
+}
+
+/* ====================== Editor ====================== */
+const f={
+  title:document.getElementById("f_title"),
+  author:document.getElementById("f_author"),
+  tipo:document.getElementById("f_tipo"),
+  impact:document.getElementById("f_impact"),
+  viability:document.getElementById("f_viability"),
+  scalability:document.getElementById("f_scalability"),
+  business:document.getElementById("f_business"),
+  effort:document.getElementById("f_effort"),
+  summary:document.getElementById("f_summary"),
+  risk:document.getElementById("f_risk"),
+  kpis:document.getElementById("f_kpis"),
+  rec:document.getElementById("f_rec"),
+  r_impact:document.getElementById("f_r_impact"),
+  r_viability:document.getElementById("f_r_viability"),
+  r_scalability:document.getElementById("f_r_scalability"),
+  r_business:document.getElementById("f_r_business"),
+  r_effort:document.getElementById("f_r_effort")
+};
+function clearForm(){ selectedId=null; Object.values(f).forEach(el=>{ if(el && el.tagName==="SELECT")el.selectedIndex=0; else if(el) el.value=""; }); if(f.effort) f.effort.value=3; }
+function selectForEdit(id){
+  const i=initiatives.find(x=>x.id===id); if(!i) return; selectedId=id;
+  f.title.value=i.title||""; f.author.value=i.author||""; f.tipo.value=i.tipo_iniciativa||""; f.impact.value=i.impact||3; f.viability.value=i.viability||3; f.scalability.value=i.scalability||3; f.business.value=i.business||3; f.effort.value=i.effort||3;
+  f.summary.value=i.summary||""; f.risk.value=i.risk||""; f.kpis.value=(i.kpis||[]).join("; "); f.rec.value=i.rec||"Priorizar";
+  f.r_impact.value=i.reasons?.impact||""; f.r_viability.value=i.reasons?.viability||""; f.r_scalability.value=i.reasons?.scalability||""; f.r_business.value=i.reasons?.business||""; f.r_effort.value=i.reasons?.effort||"";
+  if(window.innerWidth<1000){ document.getElementById("editor").scrollIntoView({behavior:"smooth"}); }
+}
+document.getElementById("saveBtn").addEventListener("click", async ()=>{
+  const reasons={ impact:f.r_impact.value.trim()||undefined, viability:f.r_viability.value.trim()||undefined, scalability:f.r_scalability.value.trim()||undefined, business:f.r_business.value.trim()||undefined, effort:f.r_effort.value.trim()||undefined };
+  const obj={
+    id:selectedId,
+    title: f.title.value.trim()||"Sin título",
+    author: f.author.value.trim()||"Anónimo",
+    tipo_iniciativa: f.tipo.value || null,
+    impact: Math.min(5,Math.max(1,+f.impact.value||3)),
+    viability: Math.min(5,Math.max(1,+f.viability.value||3)),
+    scalability: Math.min(5,Math.max(1,+f.scalability.value||3)),
+    business: Math.min(5,Math.max(1,+f.business.value||3)),
+    effort: Math.min(5,Math.max(1,+f.effort.value||3)),
+    summary: f.summary.value.trim().slice(0,300),
+    risk: f.risk.value.trim(),
+    kpis: f.kpis.value.split(";").map(s=>s.trim()).filter(Boolean),
+    rec: f.rec.value,
+    reasons: reasons
+  };
+  const isNew = !selectedId;
+  await saveToSupabase(obj, isNew);
+  state.authors.add(obj.author);
+  renderAll();
+});
+document.getElementById("clearBtn").addEventListener("click", clearForm);
+document.getElementById("deleteBtn").addEventListener("click", async ()=>{
+  if(!selectedId) return;
+  try{
+    const { error } = await supabaseClient.from('iniciativas').delete().eq('id', selectedId);
+    if(error) throw error;
+    selectedId=null; clearForm(); renderAll();
+  }catch(e){
+    console.error("Error al eliminar en Supabase:", e);
+    alert("Error al eliminar la iniciativa.");
+  }
+});
+
+/* ====================== Export / Import ====================== */
+function exportToExcel(){
+  applyFilters();
+  const rows=filtered.map((i,idx)=>({
+    "#":"#"+(idx+1),"Iniciativa":i.title,"Tipo":i.tipo_iniciativa,"Autor":i.author,"Resumen":i.summary||"",
+    "Impacto (1-5)":i.impact,"Viabilidad (1-5)":i.viability,"Escalabilidad (1-5)":i.scalability,"Prop. Comercial (1-5)":i.business,"Esfuerzo (1-5)":i.effort||3,
+    "Exp. Impacto":i.reasons?.impact||"","Exp. Viabilidad":i.reasons?.viability||"","Exp. Escalabilidad":i.reasons?.scalability||"","Exp. Comercial":i.reasons?.business||"","Exp. Esfuerzo":i.reasons?.effort||"",
+    "Recomendación":i.rec||"","Puntaje (ponderado)":i.score
+  }));
+  const wb=XLSX.utils.book_new(); const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:6},{wch:34},{wch:18},{wch:18},{wch:60},{wch:12},{wch:12},{wch:14},{wch:16},{wch:12},{wch:26},{wch:22},{wch:22},{wch:22},{wch:22},{wch:22},{wch:16},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws,"Iniciativas");
+  const w=state.weights;
+  const meta=[["Ponderaciones (%)","Impacto","Viabilidad","Escalabilidad","Prop. Comercial"],["Valores",Math.round(w.impact),Math.round(w.viability),Math.round(w.scalability),Math.round(w.business)],[],["Búsqueda",state.query||"(vacío)"],["Autores",Array.from(state.authors).join(" | ")||"(todos)"],["Orden",document.getElementById("sort").value],["Tipo de Iniciativa", state.filterType||"(todos)"]];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(meta),"Parámetros");
+  XLSX.writeFile(wb,"dashboard_iniciativas.xlsx");
+}
+document.getElementById("exportExcelBtn").addEventListener("click",exportToExcel);
+document.getElementById("menuExportXLSX").addEventListener("click",()=>{exportToExcel(); menu.style.display="none";});
+function exportJSON(){ const blob=new Blob([JSON.stringify({initiatives,authorColors,stateAI:state.ai},null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="dashboard_iniciativas.json"; a.click();}
+document.getElementById("exportJSONBtn").addEventListener("click",exportJSON);
+document.getElementById("menuExportJSON").addEventListener("click",()=>{exportJSON();menu.style.display="none";});
+function importJSONFile(file){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const obj=JSON.parse(reader.result);
+      if(Array.isArray(obj.initiatives)){
+        initiatives=obj.initiatives;
+        initiatives.forEach(i => saveToSupabase(i, true));
+      }
+      if(obj.authorColors) Object.assign(authorColors,obj.authorColors);
+      if(obj.stateAI) Object.assign(state.ai,obj.stateAI);
+      syncAPIForm(); renderAll();
+    }catch(err){
+      alert("JSON inválido");
+    }
+  };
+  reader.readAsText(file);
+}
+document.getElementById("importJSON").addEventListener("change",e=>{const f=e.target.files[0]; if(f) importJSONFile(f); e.target.value="";});
+document.getElementById("menuImportJSON").addEventListener("change",e=>{const f=e.target.files[0]; if(f) importJSONFile(f); e.target.value="";});
+
+/* ====================== CARGA: Drop + IA ====================== */
+const drop=document.getElementById("drop"), picker=document.getElementById("filePick"), preview=document.getElementById("previewList");
+let previewBuffer=[];
+function highlight(on){ drop.classList.toggle("drag",!!on); }
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();highlight(true);} ));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();highlight(false);} ));
+drop.addEventListener("drop",e=>{handleFiles([...e.dataTransfer.files]);});
+drop.addEventListener("click",()=>picker.click());
+picker.addEventListener("change",e=>{handleFiles([...e.target.files]); e.target.value="";});
+document.getElementById("aiProvider").addEventListener("change",e=>{state.ai.provider=e.target.value; saveAIKeysLS(); renderAll();});
+
+async function handleFiles(files){
+  for(const file of files){
+    if(!file.name.toLowerCase().endsWith(".docx")) continue;
+    const ab=await file.arrayBuffer();
+    const res=await mammoth.extractRawText({arrayBuffer:ab});
+    const raw=res.value||"";
+    const parsed= parseDoc(raw, file.name);
+    const aiOut = await runAI(parsed.summary, raw);
+    const merged = assemblePreview(parsed, aiOut);
+    previewBuffer.push(merged);
+  }
+  renderPreview();
+}
+
+function parseDoc(text, filename=""){
+  const clean = text.replace(/\u0000/g,"");
+  const lines = clean.split(/\r?\n/);
+  const title = (lines.find(l=>l.trim().length>2)||filename.replace(/\.docx$/i,"")).trim();
+  let author = "Anónimo";
+  for(let i=0;i<Math.min(lines.length,60);i++){
+    const L=lines[i].trim();
+    if(/^propuesta\s+por\s*:?/i.test(L)){ author = L.replace(/^propuesta\s+por\s*:?/i,"").trim() || "Anónimo"; break; }
+  }
+  const idxRE = lines.findIndex(l=>/^\s*resumen\s+ejecutivo\s*:?$/i.test(l.trim()));
+  let summary="";
+  if(idxRE>=0){
+    const chunk=[];
+    for(let i=idxRE+1;i<lines.length;i++){
+      const t=lines[i].trim();
+      if(t==="" ) { if(chunk.length>2) break; else {chunk.push(""); continue;} }
+      if(/^[A-ZÁÉÍÓÚÑ].{0,60}:$/.test(t)) break;
+      chunk.push(t);
+      if(chunk.join(" ").length>1500) break;
+    }
+    summary = normalizeSpaces(chunk.join(" "));
+  }else{
+    summary = normalizeSpaces(lines.filter(l=>l.trim()).slice(1,10).join(" "));
+  }
+  return { title, author, summary, fulltext: normalizeSpaces(clean) };
+}
+
+function assemblePreview(parsed, ai){
+  const obj = {
+    title: parsed.title || "Sin título",
+    author: parsed.author || "Anónimo",
+    tipo_iniciativa: "",
+    summary: ai.summary || "", 
+    impact: ai.impact||3, 
+    viability: ai.viability||3, 
+    scalability: ai.scalability||3, 
+    business: ai.business||3, 
+    effort: ai.effort||3,
+    reasons: {impact:ai.r_impact||"", viability:ai.r_viability||"", scalability:ai.r_scalability||"", business:ai.r_business||"", effort:ai.r_effort||""},
+    risk:"", 
+    kpis: [], 
+    rec:"Priorizar", 
+    fulltext: parsed.fulltext
+  };
+  return obj;
+}
+
+function renderPreview(){
+  preview.innerHTML="";
+  if(previewBuffer.length===0){ const em=document.createElement("div"); em.className="mini"; em.textContent="No hay documentos cargados todavía."; preview.appendChild(em); return; }
+  previewBuffer.forEach((p, index)=>{
+    const card=document.createElement("div"); card.className="card leftbar"; card.style.borderLeftColor=colorFor(p.author);
+    card.innerHTML=`
+      <div class="row" style="justify-content:space-between">
+        <div class="title">${p.title}</div>
+        <span class="author-pill"><span class="dot" style="background:${colorFor(p.author)}"></span>${p.author}</span>
+      </div>
+      <div class="pill" style="margin-top:6px">${p.tipo_iniciativa || "N/A"}</div>
+      <p class="mini" style="margin:6px 0 10px">${p.summary||"<i>(Sin resumen)</i>"}</p>
+      <div class="row">
+        <div class="pill">Impacto: ${p.impact}</div>
+        <div class="pill">Viabilidad: ${p.viability}</div>
+        <div class="pill">Escalabilidad: ${p.scalability}</div>
+        <div class="pill">Prop. Comercial: ${p.business}</div>
+        <div class="pill">Esfuerzo: ${p.effort}</div>
+      </div>
+      <div class="mini" style="margin-top:6px"><b>Notas:</b> ${p.reasons.impact||""}</div>
+      <div class="row" style="margin-top:10px;justify-content:flex-end">
+        <button class="btn" data-act="edit" data-index="${index}">Editar antes de guardar</button>
+        <button class="btn accent" data-act="commit" data-index="${index}">Guardar en Dashboard</button>
+        <button class="btn" data-act="remove" data-index="${index}">Quitar</button>
+      </div>`;
+    preview.appendChild(card);
+  });
+  preview.querySelectorAll('[data-act="remove"]').forEach(btn => btn.addEventListener("click", e => {
+      const index = parseInt(e.target.dataset.index);
+      previewBuffer.splice(index, 1);
+      renderPreview();
+  }));
+  preview.querySelectorAll('[data-act="commit"]').forEach(btn => btn.addEventListener("click", e => {
+      const index = parseInt(e.target.dataset.index);
+      commitPreview(previewBuffer[index]);
+      previewBuffer.splice(index, 1);
+      renderPreview();
+  }));
+  preview.querySelectorAll('[data-act="edit"]').forEach(btn => btn.addEventListener("click", e => {
+      const index = parseInt(e.target.dataset.index);
+      commitPreview(previewBuffer[index], false);
+      previewBuffer.splice(index, 1);
+      renderPreview();
+      showView("dashboard");
+      const last = initiatives[initiatives.length - 1];
+      if (last) selectForEdit(last.id);
+  }));
+}
+
+async function commitPreview(p, saveNow=true){
+  const obj={
+    title:p.title,
+    author:p.author,
+    tipo_iniciativa: p.tipo_iniciativa || null,
+    summary:p.summary,
+    risk:p.risk,
+    kpis:p.kpis,
+    rec:p.rec,
+    impact:p.impact,
+    viability:p.viability,
+    scalability:p.scalability,
+    business:p.business,
+    effort:p.effort,
+    reasons:p.reasons,
+    fulltext:p.fulltext
+  };
+  
+  if(saveNow){
+    await saveToSupabase(obj, true);
+    state.authors.add(obj.author);
+    renderAll();
+  } else {
+    initiatives.push(obj);
+    state.authors.add(obj.author);
+  }
+}
+document.getElementById("commitAllBtn").addEventListener("click",async()=>{ 
+  for(const p of previewBuffer){
+    await commitPreview(p,true);
+  }
+  previewBuffer=[]; 
+  renderPreview(); 
+  renderAll(); 
+});
+document.getElementById("clearPreviewBtn").addEventListener("click",()=>{ previewBuffer=[]; renderPreview(); });
+
+/* ====================== IA: OpenAI / Gemini ====================== */
+async function runAI(resumenEjecutivo, fulltext){
+  const prompt = `
+Eres un analista de iniciativas. A partir del siguiente "Resumen Ejecutivo", genera un JSON ESTRICTO con:
+- summary: síntesis clara en 2–3 frases (máx 300 caracteres) que explique de qué trata la iniciativa.
+- impact, viability, scalability, business, effort: números enteros 1–5.
+- r_impact, r_viability, r_scalability, r_business, r_effort: una frase corta explicando el porqué del puntaje (máx 180 chars c/u).
+
+Resumen Ejecutivo:
+"""${resumenEjecutivo}"""
+
+Si necesitas contexto adicional, aquí hay texto completo (opcional):
+"""${fulltext.slice(0,4000)}"""
+
+Responde SOLO con JSON, sin texto adicional. Ejemplo:
+{"summary":"...", "impact":4, "viability":3, "scalability":4, "business":3, "effort":2, "r_impact":"...", "r_viability":"...", "r_scalability":"...", "r_business":"...", "r_effort":"..."}`.trim();
+
+  try{
+    if(state.ai.provider==="openai"){
+      if(!state.ai.openaiKey) throw new Error("Falta API Key de OpenAI.");
+      const data = await callOpenAI(prompt, state.ai.openaiModel, state.ai.openaiKey);
+      return coerceAIOutput(data);
+    }else{
+      if(!state.ai.geminiKey) throw new Error("Falta API Key de Gemini.");
+      const data = await callGemini(prompt, state.ai.geminiModel, state.ai.geminiKey);
+      return coerceAIOutput(data);
+    }
+  }catch(err){
+    console.error("IA error:", err);
+    return {
+      summary: (resumenEjecutivo||"").slice(0,300),
+      impact:3, viability:3, scalability:3, business:3, effort:3,
+      r_impact:"Sin explicación (fallback).", r_viability:"Sin explicación (fallback).",
+      r_scalability:"Sin explicación (fallback).", r_business:"Sin explicación (fallback).", r_effort:"Sin explicación (fallback)."
+    };
+  }
+}
+
+async function callOpenAI(prompt, model, apiKey){
+  const res = await fetch("https://api.openai.com/v1/chat/completions",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+apiKey },
+    body:JSON.stringify({
+      model: model||"gpt-4o-mini",
+      temperature:0.2,
+      response_format:{ type:"json_object" },
+      messages:[{role:"system", content:"Responde únicamente JSON válido. Sin comentarios."},{role:"user", content: prompt}]
+    })
+  });
+  if(!res.ok){ const t=await res.text(); throw new Error("OpenAI HTTP "+res.status+": "+t); }
+  const j=await res.json();
+  const content = j?.choices?.[0]?.message?.content || "{}";
+  return JSON.parse(content);
+}
+
+async function callGemini(prompt, model, apiKey){
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model||"gemini-1.5-flash")}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ contents:[{ role:"user", parts:[{text: prompt}]}], generationConfig:{temperature:0.2} })
+  });
+  if(!res.ok){ const t=await res.text(); throw new Error("Gemini HTTP "+res.status+": "+t); }
+  const j=await res.json();
+  const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+  const clean = (text||"").replace(/```json|```/g,"").trim();
+  return JSON.parse(clean);
+}
+
+function coerceAIOutput(o){
+  const n = (x)=>{ const v=Number(x); return isFinite(v)? Math.min(5,Math.max(1,Math.round(v))) : 3; };
+  return {
+    summary: normalizeSpaces(o.summary||""),
+    impact: n(o.impact), viability: n(o.viability), scalability: n(o.scalability), business: n(o.business), effort: n(o.effort),
+    r_impact: normalizeSpaces(o.r_impact||""),
+    r_viability: normalizeSpaces(o.r_viability||""),
+    r_scalability: normalizeSpaces(o.r_scalability||""),
+    r_business: normalizeSpaces(o.r_business||""),
+    r_effort: normalizeSpaces(o.r_effort||"")
+  };
+}
+
+/* ====================== API Keys UI ====================== */
+const openaiKeyEl=document.getElementById("openaiKey");
+const openaiModelEl=document.getElementById("openaiModel");
+const geminiKeyEl=document.getElementById("geminiKey");
+const geminiModelEl=document.getElementById("geminiModel");
+const aiProviderSel=document.getElementById("aiProvider");
+
+const LS_KEY_AI = "blatorh_initiatives_ia_ai_v1";
+
+function saveAIKeysLS(){ localStorage.setItem(LS_KEY_AI, JSON.stringify(state.ai)); }
+function loadAIKeysLS(){
+  try{
+    const raw = localStorage.getItem(LS_KEY_AI);
+    if(raw){
+      const aiData = JSON.parse(raw);
+      Object.assign(state.ai, aiData);
+    }
+  }catch(e){console.warn(e);}
+}
+
+function syncAPIForm(){
+  openaiKeyEl.value=state.ai.openaiKey||"";
+  openaiModelEl.value=state.ai.openaiModel||"gpt-4o-mini";
+  geminiKeyEl.value=state.ai.geminiKey||"";
+  geminiModelEl.value=state.ai.geminiModel||"gemini-1.5-flash";
+  aiProviderSel.value=state.ai.provider||"gemini";
+}
+document.getElementById("saveOpenAI").addEventListener("click",()=>{ state.ai.openaiKey=openaiKeyEl.value.trim(); state.ai.openaiModel=openaiModelEl.value.trim()||"gpt-4o-mini"; saveAIKeysLS(); document.getElementById("openaiStatus").textContent="Guardado."; renderAll(); });
+document.getElementById("clearOpenAI").addEventListener("click",()=>{ state.ai.openaiKey=""; saveAIKeysLS(); syncAPIForm(); document.getElementById("openaiStatus").textContent="Borrado."; renderAll(); });
+document.getElementById("saveGemini").addEventListener("click",()=>{ state.ai.geminiKey=geminiKeyEl.value.trim(); state.ai.geminiModel=geminiModelEl.value.trim()||"gemini-1.5-flash"; saveAIKeysLS(); document.getElementById("geminiStatus").textContent="Guardado."; renderAll(); });
+document.getElementById("clearGemini").addEventListener("click",()=>{ state.ai.geminiKey=""; saveAIKeysLS(); syncAPIForm(); document.getElementById("geminiStatus").textContent="Borrado."; renderAll(); });
+
+document.getElementById("testOpenAI").addEventListener("click", async ()=>{
+  try{
+    const r = await callOpenAI('{"ping":"pong"} ¿Devolvé exactamente {"ok":true} como JSON.', state.ai.openaiModel, (state.ai.openaiKey||"").trim());
+    document.getElementById("openaiStatus").textContent = "OK: "+JSON.stringify(r);
+  }catch(e){ document.getElementById("openaiStatus").textContent = "Error: "+e.message; }
+});
+document.getElementById("testGemini").addEventListener("click", async ()=>{
+  try{
+    const r = await callGemini('Respondé SOLO este JSON: {"ok":true}', state.ai.geminiModel, (state.ai.geminiKey||"").trim());
+    document.getElementById("geminiStatus").textContent = "OK: "+JSON.stringify(r);
+  }catch(e){ document.getElementById("geminiStatus").textContent = "Error: "+e.message; }
+});
+
+/* ====================== Filtros / Vista / Ponderaciones ====================== */
+document.getElementById("search").addEventListener("input", e=>{state.query=e.target.value; renderAll();});
+document.getElementById("sort").addEventListener("change", e=>{state.sort=e.target.value; renderAll();});
+["wImpact","wViability","wScalability","wBusiness"].forEach(id=>{
+  document.getElementById(id).addEventListener("input", ()=>{
+    const wI=+document.getElementById("wImpact").value, wV=+document.getElementById("wViability").value, wS=+document.getElementById("wScalability").value, wB=+document.getElementById("wBusiness").value;
+    let t=wI+wV+wS+wB; if(t===0){document.getElementById("wImpact").value=25;document.getElementById("wViability").value=25;document.getElementById("wScalability").value=25;document.getElementById("wBusiness").value=25;t=100;}
+    state.weights={impact:(wI/t)*100, viability:(wV/t)*100, scalability:(wS/t)*100, business:(wB/t)*100};
+    document.getElementById("wImpactVal").textContent=Math.round(state.weights.impact)+"%";
+    document.getElementById("wViabilityVal").textContent=Math.round(state.weights.viability)+"%";
+    document.getElementById("wScalabilityVal").textContent=Math.round(state.weights.scalability)+"%";
+    document.getElementById("wBusinessVal").textContent=Math.round(state.weights.business)+"%";
+    renderAll();
+  });
+});
+const toggleBtn=document.getElementById("toggleView");
+toggleBtn.addEventListener("click", ()=>{
+  state.view=state.view==="table"?"cards":"table";
+  document.getElementById("tableView").style.display=state.view==="table"?"block":"none";
+  document.getElementById("cardsView").style.display=state.view==="cards"?"block":"none";
+  toggleBtn.textContent=state.view==="table"?"Cambiar a Cards":"Cambiar a Tabla";
+});
+document.getElementById("printBtn").addEventListener("click", ()=>window.print());
+
+/* ====================== Boot ====================== */
+async function boot(){
+  loadAIKeysLS(); syncAPIForm();
+  await loadFromSupabase();
+  initiatives.forEach(i=>state.authors.add(i.author));
+  document.getElementById("wImpact").value=35; document.getElementById("wViability").value=25; document.getElementById("wScalability").value=20; document.getElementById("wBusiness").value=20;
+  document.getElementById("wImpactVal").textContent="35%"; document.getElementById("wViabilityVal").textContent="25%"; document.getElementById("wScalabilityVal").textContent="20%"; document.getElementById("wBusinessVal").textContent="20%";
+  const h=location.hash.replace("#/",""); if(["dashboard","carga","apikeys"].includes(h)) showView(h); else showView("dashboard");
+  document.getElementById("menuExportXLSX").addEventListener("click",()=>{exportToExcel(); menu.style.display="none";});
+  document.getElementById("menuExportJSON").addEventListener("click",()=>{exportJSON(); menu.style.display="none";});
+  renderAll();
+}
+boot();
+</script>
+</body>
+</html>
