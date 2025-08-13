@@ -8,6 +8,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 
 <style>
   :root{
@@ -143,6 +145,7 @@
         </div>
         <div class="row">
           <button class="btn" id="toggleView">Cambiar a Cards</button>
+<button class="btn" id="backBtn" style="display:none">← Volver</button>
           <button class="btn" id="printBtn">Imprimir / PDF</button>
           <button class="btn accent" id="exportExcelBtn">Exportar a Excel</button>
           <button class="btn" id="exportJSONBtn">Exportar JSON</button>
@@ -169,12 +172,23 @@
 
   <div class="grid two" style="margin-top:12px">
     <div class="grid">
-      <div class="card">
+      <div class="card" id="quadrantContainer">
         <div class="row" style="justify-content:space-between;align-items:center">
           <strong>Mapa de Priorización</strong>
-          <span class="mini">Ejes: Impacto (X) vs. Esfuerzo (Y)</span>
+          <button class="btn accent mini" id="toggleAnalyticsBtn">Ver Análisis</button>
         </div>
         <canvas id="quad"></canvas>
+      </div>
+
+      <div class="card hidden" id="analyticsCharts">
+          <div class="row" style="justify-content:space-between;align-items:center">
+              <strong>Análisis de Iniciativas</strong>
+              <button class="btn accent mini" id="toggleQuadrantBtn" style="display:none;">Ver Mapa</button>
+          </div>
+          <div class="grid" style="grid-template-columns:1fr 1fr; gap: 10px; margin-top: 10px;">
+              <div class="card" style="padding:10px; height:280px;"><canvas id="chartImpact"></canvas></div>
+              <div class="card" style="padding:10px; height:280px;"><canvas id="chartTipo"></canvas></div>
+          </div>
       </div>
 
       <div class="card" id="tableView">
@@ -364,6 +378,9 @@ let state = {
   filterType: "",
   sort:"score",
   view:"table",
+  
+  filterImpact: null,
+analyticsView: false,
   weights:{impact:35,viability:25,scalability:20,business:20},
   ai:{ provider:"gemini", openaiKey:"", openaiModel:"gpt-4o-mini", geminiKey:"", geminiModel:"gemini-1.5-flash" }
 };
@@ -488,7 +505,9 @@ function applyFilters(){
       const matchQ=!q || text.includes(q);
       const matchA=state.authors.size===0 || state.authors.has(i.author);
       const matchT = !state.filterType || i.tipo_iniciativa === state.filterType;
-      return matchQ && matchA && matchT;
+      
+      const matchI = (state.filterImpact == null) || (Number(i.impact) === Number(state.filterImpact));
+return matchQ && matchA && matchT && matchI;
     })
     .map(i=>({...i, score:avgScore(i,state.weights)}));
 
@@ -502,6 +521,167 @@ function applyFilters(){
     default: filtered.sort((a,b)=>b.score-a.score);
   }
 }
+
+let charts = {};
+function renderCharts(){
+    if(charts.impact) charts.impact.destroy();
+    if(charts.tipo) charts.tipo.destroy();
+    
+    Chart.register(ChartDataLabels);
+
+    const impactData = [0, 0, 0, 0, 0];
+    const impactLabels = ['1', '2', '3', '4', '5'];
+    initiatives.forEach(i => {
+        if (i.impact >= 1 && i.impact <= 5) {
+            impactData[i.impact - 1]++;
+        }
+    });
+
+    charts.impact = new Chart(document.getElementById('chartImpact'), {
+        type: 'bar',
+        data: {
+            labels: impactLabels,
+            datasets: [{
+                label: 'Distribución de Puntajes de Impacto',
+                data: impactData,
+                backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#22d3ee', '#2E86DE']
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { 
+                    beginAtZero: true, 
+                    ticks: { color: '#fff' } 
+                },
+                x: { ticks: { color: '#fff' } }
+            },
+            plugins: {
+                legend: { display: false },
+                title: { display: true, text: 'Distribución de Puntajes de Impacto', color: '#fff' },
+                datalabels: { 
+                    color: '#fff',
+                    anchor: 'center', 
+                    align: 'center',
+                    font: { weight: 'bold' }
+                }
+            }
+        },
+        plugins: [ChartDataLabels]
+    });
+    
+    document.getElementById('chartImpact').ondblclick = (e) => {
+      const points = charts.impact.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+      if (!points.length) return;
+      const firstPoint = points[0];
+      const score = Number(charts.impact.data.labels[firstPoint.index]);
+      pushFilterState();
+      state.filterImpact = score;
+      state.query = "";
+      state.filterType = "";
+      const s = document.getElementById('search');
+      const ft = document.getElementById('filterType');
+      if(s) s.value = "";
+      if(ft) ft.value = "";
+      state.view = "cards";
+      renderAll();
+      updateViewUI();
+    };
+
+
+    const tipoLabels = ['Colaboración Interna', 'Alianzas Estratégicas', 'Innovación y Servicios'];
+    const tipoData = {};
+    tipoLabels.forEach(label => tipoData[label] = 0);
+    
+    initiatives.forEach(i => {
+        if (i.tipo_iniciativa && tipoData.hasOwnProperty(i.tipo_iniciativa)) {
+            tipoData[i.tipo_iniciativa]++;
+        }
+    });
+    
+    const filteredLabels = Object.keys(tipoData).filter(key => tipoData[key] > 0);
+    const filteredValues = filteredLabels.map(key => tipoData[key]);
+    const filteredColors = filteredLabels.map(key => {
+        if (key === 'Colaboración Interna') return '#2E86DE';
+        if (key === 'Alianzas Estratégicas') return '#27AE60';
+        if (key === 'Innovación y Servicios') return '#9B59B6';
+        return '#93a4bd';
+    });
+    
+    if (filteredValues.length === 0) {
+        document.getElementById('chartTipo').style.display = 'none';
+    } else {
+        document.getElementById('chartTipo').style.display = 'block';
+    }
+
+    charts.tipo = new Chart(document.getElementById('chartTipo'), {
+        type: 'pie',
+        data: {
+            labels: filteredLabels,
+            datasets: [{
+                data: filteredValues,
+                backgroundColor: filteredColors,
+                borderWidth: 1,
+                borderColor: '#0b1420'
+            }]
+        },
+        options: { 
+            responsive: true, 
+            plugins: { 
+                legend: { labels: { color: '#fff', padding: 10 } },
+                title: { display: true, text: 'Iniciativas por Tipo', color: '#fff' },
+                datalabels: { 
+                    color: '#fff',
+                    formatter: (value, ctx) => {
+                        return value;
+                    },
+                    font: { weight: 'bold' }
+                }
+            } 
+        },
+        plugins: [ChartDataLabels]
+    });
+    document.getElementById('chartTipo').ondblclick = (e) => {
+        const points = charts.tipo.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+        if (!points.length) return;
+        const firstPoint = points[0];
+        const tipo = charts.tipo.data.labels[firstPoint.index];
+        pushFilterState();
+        const ft = document.getElementById('filterType');
+        const s = document.getElementById('search');
+        if(ft) ft.value = tipo;
+        if(s) s.value = "";
+        state.filterType = tipo;
+        state.filterImpact = null;
+        state.query = "";
+        state.view = "cards";
+        renderAll();
+        updateViewUI();
+    };
+}
+function toggleAnalyticsView(){
+    const analyticsBtn = document.getElementById("toggleAnalyticsBtn");
+    const quadrantContainer = document.getElementById("quadrantContainer");
+    const analyticsCharts = document.getElementById("analyticsCharts");
+    const toggleQuadrantBtn = document.getElementById("toggleQuadrantBtn");
+
+    state.analyticsView = !state.analyticsView;
+    if(state.analyticsView){
+        quadrantContainer.classList.add("hidden");
+        analyticsCharts.classList.remove("hidden");
+        analyticsBtn.classList.add("hidden");
+        toggleQuadrantBtn.classList.remove("hidden");
+        renderCharts();
+    }else{
+        quadrantContainer.classList.remove("hidden");
+        analyticsCharts.classList.add("hidden");
+        analyticsBtn.classList.remove("hidden");
+        toggleQuadrantBtn.classList.add("hidden");
+    }
+}
+document.getElementById("toggleAnalyticsBtn").addEventListener("click", toggleAnalyticsView);
+document.getElementById("toggleQuadrantBtn").addEventListener("click", toggleAnalyticsView);
+
 
 function renderTable(){
   const tb=document.getElementById("tbody"); tb.innerHTML="";
@@ -583,6 +763,12 @@ async function renderAll(){
   await loadFromSupabase();
   document.getElementById("aiBanner").classList.toggle("hidden", hasAI());
   rebuildChips(); applyFilters(); renderTable(); renderCards(); drawQuadrant();
+
+  if(state.analyticsView){
+      renderCharts();
+  
+  try{ updateViewUI(); }catch(e){}
+}
 }
 
 /* ====================== Editor ====================== */
@@ -748,7 +934,7 @@ function assemblePreview(parsed, ai){
   const obj = {
     title: parsed.title || "Sin título",
     author: parsed.author || "Anónimo",
-    tipo_iniciativa: "",
+    tipo_iniciativa: null,
     summary: ai.summary || "", 
     impact: ai.impact||3, 
     viability: ai.viability||3, 
@@ -775,7 +961,7 @@ function renderPreview(){
         <span class="author-pill"><span class="dot" style="background:${colorFor(p.author)}"></span>${p.author}</span>
       </div>
       <div class="pill" style="margin-top:6px">${p.tipo_iniciativa || "N/A"}</div>
-      <p class="mini" style="margin:6px 0 10px">${p.summary||"<i>(Sin resumen)</i>"}</p>
+      <p class="mini" style="margin:6px 0 10px">${p.summary||""}</p>
       <div class="row">
         <div class="pill">Impacto: ${p.impact}</div>
         <div class="pill">Viabilidad: ${p.viability}</div>
@@ -992,15 +1178,60 @@ document.getElementById("sort").addEventListener("change", e=>{state.sort=e.targ
     renderAll();
   });
 });
-const toggleBtn=document.getElementById("toggleView");
-toggleBtn.addEventListener("click", ()=>{
+const toggleViewBtn=document.getElementById("toggleView");
+toggleViewBtn.addEventListener("click", ()=>{
   state.view=state.view==="table"?"cards":"table";
   document.getElementById("tableView").style.display=state.view==="table"?"block":"none";
   document.getElementById("cardsView").style.display=state.view==="cards"?"block":"none";
-  toggleBtn.textContent=state.view==="table"?"Cambiar a Cards":"Cambiar a Tabla";
+  toggleViewBtn.textContent=state.view==="table"?"Cambiar a Cards":"Cambiar a Tabla";
 });
 document.getElementById("printBtn").addEventListener("click", ()=>window.print());
 
+
+/* ====================== Navegación (Volver) ====================== */
+const filterHistory = [];
+function updateViewUI(){
+  const toggleViewBtn = document.getElementById("toggleView");
+  const tv = document.getElementById("tableView");
+  const cv = document.getElementById("cardsView");
+  if(tv) tv.style.display = state.view==="table" ? "block" : "none";
+  if(cv) cv.style.display = state.view==="cards" ? "block" : "none";
+  if(toggleViewBtn){
+    toggleViewBtn.textContent = state.view==="table" ? "Cambiar a Cards" : "Cambiar a Tabla";
+  }
+  const backBtn = document.getElementById("backBtn");
+  if(backBtn){
+    backBtn.style.display = filterHistory.length ? "inline-block" : "none";
+  }
+}
+function pushFilterState(){
+  filterHistory.push({
+    query: state.query,
+    filterType: state.filterType,
+    filterImpact: state.filterImpact,
+    view: state.view,
+    authors: Array.from(state.authors||[])
+  });
+  updateViewUI();
+}
+function restoreFilterState(){
+  if(!filterHistory.length) return;
+  const prev = filterHistory.pop();
+  state.query = prev.query||"";
+  state.filterType = prev.filterType||"";
+  state.filterImpact = prev.filterImpact==null? null : Number(prev.filterImpact);
+  state.view = prev.view||"table";
+  state.authors = new Set(prev.authors||[]);
+  const s = document.getElementById("search");
+  const ft = document.getElementById("filterType");
+  if(s) s.value = state.query;
+  if(ft) ft.value = state.filterType;
+  renderAll();
+  updateViewUI();
+}
+document.addEventListener("DOMContentLoaded", ()=>{
+  document.getElementById("backBtn")?.addEventListener("click", restoreFilterState);
+});
 /* ====================== Boot ====================== */
 async function boot(){
   loadAIKeysLS(); syncAPIForm();
